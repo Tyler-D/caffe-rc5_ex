@@ -105,6 +105,13 @@ Dtype caffe_cpu_strided_dot(const int n, const Dtype* x, const int incx,
 template <typename Dtype>
 Dtype caffe_cpu_asum(const int n, const Dtype* x);
 
+//sort the weights and find weights to be keep
+template <typename Dtype>
+void caffe_cpu_prune_ratio(const int n, const float ratio, Dtype* x, Dtype* mask);
+
+template <typename Dtype>
+void caffe_cpu_prune_thres(const int n, const float thres, Dtype* x, Dtype* mask);
+
 // the branchless, type-safe version from
 // http://stackoverflow.com/questions/1903954/is-there-a-standard-sign-function-signum-sgn-in-c-c
 template<typename Dtype>

@@ -19,6 +19,60 @@ void InnerProductLayer<Dtype>::LayerSetUp(const vector<Blob<Dtype>*>& bottom,
   // length K_ vector. For example, if bottom[0]'s shape is (N, C, H, W),
   // and axis == 1, N inner products with dimension CHW are performed.
   K_ = bottom[0]->count(axis);
+  weight_threshold_ = -1.0f;
+  prune_ratio_ = 0.0f;
+  // Check if we need to prunned the connections:
+  switch (this->layer_param_.inner_product_param().prune_type())
+  {
+    case InnerProductParameter_PruneType_NONE:
+    {
+      pruned_ = true;
+      break;
+    }
+    case InnerProductParameter_PruneType_THRESHOLD:
+    {
+      if (this->layer_param_.inner_product_param().has_weight_threshold())
+      {
+        weight_threshold_ = this->layer_param_.inner_product_param().weight_threshold();
+        pruned_ = false;
+      }
+    } 
+    case InnerProductParameter_PruneType_RATIO:
+    {
+      prune_ratio_ = this->layer_param_.inner_product_param().prune_ratio();
+      CHECK_LT(prune_ratio_, 1);
+      CHECK_GE(prune_ratio_, 0);
+      pruned_ = (prune_ratio_ == 0);
+    }
+  }
+  //if (!pruned_)
+  //{
+    //prune_masks_.resize(this->blobs_.size());
+    
+    ////masks weight 
+    //vector<int> weight_shape(2);
+    //if (transpose_) {
+      //weight_shape[0] = K_;
+      //weight_shape[1] = N_;
+    //} else {
+      //weight_shape[0] = N_;
+      //weight_shape[1] = K_;
+    //}
+
+    //prune_masks_[0].reset(new Blob<Dtype>(weight_shape));
+    //caffe_set(this->blobs_[0]->count(), (Dtype)1,
+              //prune_masks_[0]->mutable_cpu_data());
+    
+    ////masks bias
+    //if (bias_term_)
+    //{
+      //vector<int> bias_shape(1, N_);
+      //prune_masks_[1].reset(new Blob<Dtype>(bias_shape));
+      //caffe_set(this->blobs_[1]->count(), (Dtype)1,
+                //prune_masks_[1]->mutable_cpu_data());
+    //}
+
+  //}
   // Check if we need to set up the weights
   if (this->blobs_.size() > 0) {
     LOG(INFO) << "Skipping parameter initialization";
@@ -28,6 +82,13 @@ void InnerProductLayer<Dtype>::LayerSetUp(const vector<Blob<Dtype>*>& bottom,
     } else {
       this->blobs_.resize(1);
     }
+
+    if (!pruned_)
+    {
+      prune_masks_.resize(this->blobs_.size());
+    }    
+    
+
     // Initialize the weights
     vector<int> weight_shape(2);
     if (transpose_) {
@@ -38,6 +99,13 @@ void InnerProductLayer<Dtype>::LayerSetUp(const vector<Blob<Dtype>*>& bottom,
       weight_shape[1] = K_;
     }
     this->blobs_[0].reset(new Blob<Dtype>(weight_shape));
+    //masks weight 
+    if (!pruned_)
+    {
+      prune_masks_[0].reset(new Blob<Dtype>(weight_shape));
+      caffe_set(this->blobs_[0]->count(), (Dtype)1,
+                prune_masks_[0]->mutable_cpu_data());
+    }
     // fill the weights
     shared_ptr<Filler<Dtype> > weight_filler(GetFiller<Dtype>(
         this->layer_param_.inner_product_param().weight_filler()));
@@ -49,6 +117,14 @@ void InnerProductLayer<Dtype>::LayerSetUp(const vector<Blob<Dtype>*>& bottom,
       shared_ptr<Filler<Dtype> > bias_filler(GetFiller<Dtype>(
           this->layer_param_.inner_product_param().bias_filler()));
       bias_filler->Fill(this->blobs_[1].get());
+
+      //bias_mask
+      if (!pruned_)
+      {
+        prune_masks_[1].reset(new Blob<Dtype>(bias_shape));
+        caffe_set(this->blobs_[1]->count(), (Dtype)1,
+                  prune_masks_[1]->mutable_cpu_data());
+      }
     }
   }  // parameter initialization
   this->param_propagate_down_.resize(this->blobs_.size(), true);
@@ -86,6 +162,35 @@ void InnerProductLayer<Dtype>::Forward_cpu(const vector<Blob<Dtype>*>& bottom,
   const Dtype* bottom_data = bottom[0]->cpu_data();
   Dtype* top_data = top[0]->mutable_cpu_data();
   const Dtype* weight = this->blobs_[0]->cpu_data();
+  if (!pruned_)
+  {
+    //@TODO 
+    if (this->layer_param_.inner_product_param().prune_type() == 
+        InnerProductParameter_PruneType_THRESHOLD)
+    {
+      caffe_cpu_prune_thres(this->blobs_[0]->count(), 
+         weight_threshold_, this->blobs_[0]->mutable_cpu_data(),
+         prune_masks_[0]->mutable_cpu_data());
+      if (bias_term_){
+        caffe_cpu_prune_thres(this->blobs_[1]->count(),
+            weight_threshold_, this->blobs_[1]->mutable_cpu_data(),
+            prune_masks_[1]->mutable_cpu_data());
+      }
+    }
+    else
+    {
+      caffe_cpu_prune_ratio(this->blobs_[0]->count(),
+          prune_ratio_, this->blobs_[0]->mutable_cpu_data(),
+          prune_masks_[0]->mutable_cpu_data());
+      if (bias_term_){
+        caffe_cpu_prune_ratio(this->blobs_[1]->count(),
+            prune_ratio_, this->blobs_[1]->mutable_cpu_data(),
+            prune_masks_[1]->mutable_cpu_data());
+      }
+
+    }
+    pruned_ = true;
+  }
   caffe_cpu_gemm<Dtype>(CblasNoTrans, transpose_ ? CblasNoTrans : CblasTrans,
       M_, N_, K_, (Dtype)1.,
       bottom_data, weight, (Dtype)0., top_data);
@@ -136,6 +241,27 @@ void InnerProductLayer<Dtype>::Backward_cpu(const vector<Blob<Dtype>*>& top,
           M_, K_, N_,
           (Dtype)1., top_diff, this->blobs_[0]->cpu_data(),
           (Dtype)0., bottom[0]->mutable_cpu_diff());
+    }
+  }
+
+  if (this->layer_param_.inner_product_param().prune_type() != 
+      InnerProductParameter_PruneType_NONE)
+  {
+    //weight_mask
+    if (this->param_propagate_down_[0])
+    {
+      caffe_mul<Dtype>(this->blobs_[0]->count(), 
+                      this->blobs_[0]->cpu_diff(),
+                      this->prune_masks_[0]->cpu_data(), 
+                      this->blobs_[0]->mutable_cpu_diff());
+    }
+    //bias_mask
+    if (bias_term_ && this->param_propagate_down_[1])
+    {
+      caffe_mul<Dtype>(this->blobs_[1]->count(),
+                       this->blobs_[1]->cpu_diff(),
+                       this->prune_masks_[1]->cpu_data(),
+                       this->blobs_[1]->mutable_cpu_diff());
     }
   }
 }

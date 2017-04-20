@@ -11,6 +11,35 @@ void InnerProductLayer<Dtype>::Forward_gpu(const vector<Blob<Dtype>*>& bottom,
     const vector<Blob<Dtype>*>& top) {
   const Dtype* bottom_data = bottom[0]->gpu_data();
   Dtype* top_data = top[0]->mutable_gpu_data();
+  if (!pruned_)
+  {
+    //@TODO 
+    if (this->layer_param_.inner_product_param().prune_type() == 
+        InnerProductParameter_PruneType_THRESHOLD)
+    {
+      caffe_cpu_prune_thres(this->blobs_[0]->count(), 
+         weight_threshold_, this->blobs_[0]->mutable_cpu_data(),
+         prune_masks_[0]->mutable_cpu_data());
+      if (bias_term_){
+        caffe_cpu_prune_thres(this->blobs_[1]->count(),
+            weight_threshold_, this->blobs_[1]->mutable_cpu_data(),
+            prune_masks_[1]->mutable_cpu_data());
+      }
+    }
+    else
+    {
+      caffe_cpu_prune_ratio(this->blobs_[0]->count(),
+          prune_ratio_, this->blobs_[0]->mutable_cpu_data(),
+          prune_masks_[0]->mutable_cpu_data());
+      if (bias_term_){
+        caffe_cpu_prune_ratio(this->blobs_[1]->count(),
+            prune_ratio_, this->blobs_[1]->mutable_cpu_data(),
+            prune_masks_[1]->mutable_cpu_data());
+      }
+
+    }
+    pruned_ = true;
+  }
   const Dtype* weight = this->blobs_[0]->gpu_data();
   if (M_ == 1) {
     caffe_gpu_gemv<Dtype>(CblasNoTrans, N_, K_, (Dtype)1.,
@@ -70,6 +99,27 @@ void InnerProductLayer<Dtype>::Backward_gpu(const vector<Blob<Dtype>*>& top,
           M_, K_, N_,
          (Dtype)1., top_diff, this->blobs_[0]->gpu_data(),
          (Dtype)0., bottom[0]->mutable_gpu_diff());
+    }
+  }
+
+  if (this->layer_param_.inner_product_param().prune_type() != 
+      InnerProductParameter_PruneType_NONE)
+  {
+    //weight_mask
+    if (this->param_propagate_down_[0])
+    {
+      caffe_gpu_mul<Dtype>(this->blobs_[0]->count(), 
+                           this->blobs_[0]->gpu_diff(),
+                           this->prune_masks_[0]->gpu_data(), 
+                           this->blobs_[0]->mutable_gpu_diff());
+    }
+    //bias_mask
+    if (bias_term_ && this->param_propagate_down_[1])
+    {
+      caffe_gpu_mul<Dtype>(this->blobs_[1]->count(),
+                           this->blobs_[1]->gpu_diff(),
+                           this->prune_masks_[1]->gpu_data(),
+                           this->blobs_[1]->mutable_gpu_diff());
     }
   }
 }

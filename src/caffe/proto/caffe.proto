@@ -822,6 +822,18 @@ message InnerProductParameter {
   // of the weight matrix. The weight matrix itself is not going to be transposed
   // but rather the transfer flag of operations will be toggled accordingly.
   optional bool transpose = 6 [default = false];
+
+  //The params for Dense-Sparse-Dense training:
+  //Assign the weight to zero if the weight is less than weight_threshold 
+  enum PruneType{
+    NONE = 0;
+    THRESHOLD = 1;
+    RATIO = 2;
+  }
+  optional PruneType prune_type = 7 [default = NONE];
+  optional float weight_threshold = 8;
+  //The ratio is between [0,1).We sort and deprecate the small weights. 
+  optional float prune_ratio = 9 [default = 0.0];
 }
 
 message InputParameter {

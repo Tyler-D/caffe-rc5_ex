@@ -6,6 +6,10 @@
 #include "caffe/common.hpp"
 #include "caffe/util/math_functions.hpp"
 #include "caffe/util/rng.hpp"
+#include <cmath>
+#include <algorithm>
+#include <vector>
+#include <utility>
 
 namespace caffe {
 
@@ -371,5 +375,55 @@ void caffe_cpu_scale<double>(const int n, const double alpha, const double *x,
   cblas_dcopy(n, x, 1, y, 1);
   cblas_dscal(n, alpha, y, 1);
 }
+
+template <typename Dtype>
+void caffe_cpu_prune_ratio(const int n, const float ratio, Dtype* x, Dtype* mask)
+{
+  std::vector<std::pair<Dtype, int> > x_index;
+  for(int i =0; i < n; i++)
+  {
+    x_index.push_back(std::make_pair(abs(x[i]),i));
+  }  
+
+  std::partial_sort(x_index.begin(), x_index.begin()+
+                    std::floor(ratio * n), x_index.end(), 
+                    std::less<std::pair<Dtype, int> >());
+
+  for(int i = 0; i < std::floor(ratio*n); i++)
+  {
+    x[x_index[i].second] = 0;
+    mask[x_index[i].second] = 0;
+  }
+}
+
+template 
+void caffe_cpu_prune_ratio<float>(const int n, const float ratio, float* x, float* mask);
+
+template 
+void caffe_cpu_prune_ratio<double>(const int n, const float ratio, double* x, double* mask);
+
+template <typename Dtype>
+void caffe_cpu_prune_thres(const int n, const float thres, Dtype* x , Dtype* mask)
+{
+  std::vector<std::pair<Dtype, int> > x_index;
+  for(int i = 0; i < n; i++)
+  {
+    x_index.push_back(std::make_pair(abs(x[i]), i));
+  }
+  
+  for(int i = 0; i < n; i++)
+  {
+    if (x_index[i].first < thres)
+    {
+      x[x_index[i].second] = 0;
+      mask[x_index[i].second] = 0;
+    }
+  }
+}
+template  
+void caffe_cpu_prune_thres<float>(const int n, const float ratio, float* x, float* mask);
+
+template 
+void caffe_cpu_prune_thres<double>(const int n, const float ratio, double* x, double* mask);
 
 }  // namespace caffe
