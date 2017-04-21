@@ -336,6 +336,9 @@ class Net {
   vector<Callback*> before_backward_;
   vector<Callback*> after_backward_;
 
+  //if the network is restored from a sparse network?
+  bool restored_from_sparse_;   
+
 DISABLE_COPY_AND_ASSIGN(Net);
 };
 

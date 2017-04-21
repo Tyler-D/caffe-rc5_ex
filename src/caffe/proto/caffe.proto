@@ -87,9 +87,13 @@ message NetParameter {
   // Net::Backward, and Net::Update.
   optional bool debug_info = 7 [default = false];
 
+  // If the net is restored from Sparse network
+  optional bool restored_from_sparse = 101 [default = false];  
+
   // The layers that make up the net.  Each of their configurations, including
   // connectivity and behavior, is specified as a LayerParameter.
   repeated LayerParameter layer = 100;  // ID 100 so layers are printed last.
+
 
   // DEPRECATED: use 'layer' instead.
   repeated V1LayerParameter layers = 2;

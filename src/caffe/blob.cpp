@@ -5,6 +5,7 @@
 #include "caffe/common.hpp"
 #include "caffe/syncedmem.hpp"
 #include "caffe/util/math_functions.hpp"
+#include <math.h>
 
 namespace caffe {
 
@@ -509,6 +510,87 @@ void Blob<Dtype>::FromProto(const BlobProto& proto, bool reshape) {
     Dtype* diff_vec = mutable_cpu_diff();
     for (int i = 0; i < count_; ++i) {
       diff_vec[i] = proto.diff(i);
+    }
+  }
+}
+
+//single precision
+bool EqualZero(float x)
+{
+  if (abs(x - 0.0f) < 1e-6)
+    return true;
+  else
+    return false;
+}
+
+//double precision
+bool EqualZero(double x)
+{
+  if (abs(x - 0.0f) < 1e-15)
+    return true;
+  else 
+    return false;
+}
+
+template <typename Dtype>
+void Blob<Dtype>::FromSparseProto(const BlobProto& proto, bool reshape) {
+  if (reshape) {
+    vector<int> shape;
+    if (proto.has_num() || proto.has_channels() ||
+        proto.has_height() || proto.has_width()) {
+      // Using deprecated 4D Blob dimensions --
+      // shape is (num, channels, height, width).
+      shape.resize(4);
+      shape[0] = proto.num();
+      shape[1] = proto.channels();
+      shape[2] = proto.height();
+      shape[3] = proto.width();
+    } else {
+      shape.resize(proto.shape().dim_size());
+      for (int i = 0; i < proto.shape().dim_size(); ++i) {
+        shape[i] = proto.shape().dim(i);
+      }
+    }
+    Reshape(shape);
+  } else {
+    CHECK(ShapeEquals(proto)) << "shape mismatch (reshape not set)";
+  }
+  // copy data
+  Dtype* data_vec = mutable_cpu_data();
+  if (proto.double_data_size() > 0) {
+    CHECK_EQ(count_, proto.double_data_size());
+    for (int i = 0; i < count_; ++i) {
+      if (!EqualZero(proto.double_data(i)))
+      {
+        data_vec[i] = proto.double_data(i);
+      }
+    }
+  } else {
+    CHECK_EQ(count_, proto.data_size());
+    for (int i = 0; i < count_; ++i) {
+      if (!EqualZero(proto.data(i)))
+      {
+        data_vec[i] = proto.data(i);
+      }
+    }
+  }
+  if (proto.double_diff_size() > 0) {
+    CHECK_EQ(count_, proto.double_diff_size());
+    Dtype* diff_vec = mutable_cpu_diff();
+    for (int i = 0; i < count_; ++i) {
+      if (!EqualZero(proto.double_diff(i)))
+      {
+        diff_vec[i] = proto.double_diff(i);
+      }
+    }
+  } else if (proto.diff_size() > 0) {
+    CHECK_EQ(count_, proto.diff_size());
+    Dtype* diff_vec = mutable_cpu_diff();
+    for (int i = 0; i < count_; ++i) {
+      if (!EqualZero(proto.diff(i)))
+      {
+        diff_vec[i] = proto.diff(i);
+      }
     }
   }
 }

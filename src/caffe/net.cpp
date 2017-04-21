@@ -43,6 +43,7 @@ Net<Dtype>::Net(const string& param_file, Phase phase,
 template <typename Dtype>
 void Net<Dtype>::Init(const NetParameter& in_param) {
   // Set phase from the state.
+  restored_from_sparse_ = in_param.restored_from_sparse();
   phase_ = in_param.state().phase();
   // Filter layers based on their include/exclude rules and
   // the current NetState.
@@ -762,7 +763,14 @@ void Net<Dtype>::CopyTrainedLayersFrom(const NetParameter& param) {
             << "copying from a saved net, rename the layer.";
       }
       const bool kReshape = false;
-      target_blobs[j]->FromProto(source_layer.blobs(j), kReshape);
+      if (this->restored_from_sparse_)
+      {
+        target_blobs[j]->FromSparseProto(source_layer.blobs(j), kReshape);
+      }
+      else
+      {
+        target_blobs[j]->FromProto(source_layer.blobs(j), kReshape);
+      }
     }
   }
 }
