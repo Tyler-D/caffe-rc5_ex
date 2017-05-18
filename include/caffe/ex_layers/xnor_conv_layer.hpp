@@ -35,12 +35,15 @@ class XNORConvolutionLayer: public Layer<Dtype>{
         const vector<Blob<Dtype>*>& top);
     virtual void Backward_cpu(const vector<Blob<Dtype>*>& bottom,
         const vector<bool>& propagate_down,
-        const vector<Blob<Dtype>*>& top) {NOT_IMPLEMENTED;};
+        const vector<Blob<Dtype>*>& top) {
+                                          //NOT_IMPLEMENTED;
+                                          };
     virtual void Forward_gpu(const vector<Blob<Dtype>*>& bottom,
         const vector<Blob<Dtype>*>& top) {Forward_cpu(bottom, top);};
     virtual void Backward_gpu(const vector<Blob<Dtype>*>& bottom,
         const vector<bool>& propagate_down,
-        const vector<Blob<Dtype>*>& top) {NOT_IMPLEMENTED;};
+        const vector<Blob<Dtype>*>& top) {//NOT_IMPLEMENTED;
+                                          };
 
     /// @brief The spatial dimensions of the input.
     inline int input_shape(int i) {

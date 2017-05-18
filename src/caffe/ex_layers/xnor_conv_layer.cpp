@@ -236,6 +236,8 @@ void XNORConvolutionLayer<Dtype>::Reshape(const vector<Blob<Dtype>*>& bottom,
 
   //for XNOR binarizeing weight and only support 2-D convolution
   const int* kernel_shape_data = this->kernel_shape_.cpu_data();
+  //LOG(INFO)<<" binary_weights : "<<conv_out_channels_<<" "<<conv_in_channels_<<" "
+    //<<kernel_shape_data[0]<<" "<<kernel_shape_data[1];
   binary_weights_.Reshape(conv_out_channels_ , conv_in_channels_ , 
       kernel_shape_data[0], kernel_shape_data[1]);
   binary_weights_.copyRealValueFrom(this->blobs_[0]->cpu_data());
