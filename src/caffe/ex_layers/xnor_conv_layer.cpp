@@ -277,11 +277,11 @@ void XNORConvolutionLayer<Dtype>::Forward_cpu(const vector<Blob<Dtype>*>& bottom
      kernel_shape_data[0], kernel_shape_data[1], pad_data[0], pad_data[1], 
      stride_data[0],stride_data[1], dilation_data[0], dilation_data[1]);
   //bias:
-  for(int n = 0; n < this->num_; n++){
-    if (this->bias_term_) {
-      const Dtype* bias = this->blobs_[1]->cpu_data();
-      this->forward_cpu_bias(top_data + n * this->top_dim_, bias);
-      }
+  if (this->bias_term_) {
+    for(int n = 0; n < this->num_; n++){
+        const Dtype* bias = this->blobs_[1]->cpu_data();
+        this->forward_cpu_bias(top_data + n * this->top_dim_, bias);
+    }
   }
 }
 
