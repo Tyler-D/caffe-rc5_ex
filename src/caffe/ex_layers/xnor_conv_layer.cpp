@@ -1,5 +1,8 @@
 #include "caffe/ex_layers/xnor_conv_layer.hpp"
 #include "caffe/filler.hpp"
+#include <iostream>
+#include <fstream>
+using std::ofstream;
 
 namespace caffe{
 
@@ -171,7 +174,10 @@ void XNORConvolutionLayer<Dtype>::LayerSetUp(const vector<Blob<Dtype>*>& bottom,
     // Propagate gradients to the parameters (as directed by backward pass).
     this->param_propagate_down_.resize(this->blobs_.size(), true);
 
-    
+    //Weights binarization
+    binarized_ = false;
+    binary_weights_.Reshape(conv_out_channels_ , conv_in_channels_ , 
+        kernel_shape_data[0], kernel_shape_data[1]);
 }
 
 template<typename Dtype>
@@ -201,31 +207,9 @@ void XNORConvolutionLayer<Dtype>::Reshape(const vector<Blob<Dtype>*>& bottom,
     top[top_id]->Reshape(top_shape);
   }
 
-  //conv_out_spatial_dim_ = top[0]->count(first_spatial_axis);
-
-  //col_offset_ = kernel_dim_ * conv_out_spatial_dim_;
-  //output_offset_ = conv_out_channels_ * conv_out_spatial_dim_ / group_;
-  //// Setup input dimensions (conv_input_shape_).
-  //vector<int> bottom_dim_blob_shape(1, num_spatial_axes_ + 1);
-  //conv_input_shape_.Reshape(bottom_dim_blob_shape);
-  //int* conv_input_shape_data = conv_input_shape_.mutable_cpu_data();
-  //for (int i = 0; i < num_spatial_axes_ + 1; ++i) {
-    //conv_input_shape_data[i] = bottom[0]->shape(channel_axis_ + i);
-  //}
-  //// The im2col result buffer will only hold one image at a time to avoid
-  //// overly large memory usage. In the special case of 1x1 convolution
-  //// it goes lazily unused to save memory.
-  //col_buffer_shape_.clear();
-  //col_buffer_shape_.push_back(kernel_dim_ * group_);
-  //for (int i = 0; i < num_spatial_axes_; ++i) {
-    //col_buffer_shape_.push_back(output_shape_[i]);
-  //}
-  //col_buffer_.Reshape(col_buffer_shape_);
   bottom_dim_ = bottom[0]->count(channel_axis_);
   top_dim_ = top[0]->count(channel_axis_);
-  //num_kernels_im2col_ = conv_in_channels_ * conv_out_spatial_dim_;
-  //num_kernels_col2im_ = reverse_dimensions() ? top_dim_ : bottom_dim_;
-  // Set up the all ones "bias multiplier" for adding biases by BLAS
+
   out_spatial_dim_ = top[0]->count(first_spatial_axis);
   if (bias_term_) {
     vector<int> bias_multiplier_shape(1, out_spatial_dim_);
@@ -235,16 +219,9 @@ void XNORConvolutionLayer<Dtype>::Reshape(const vector<Blob<Dtype>*>& bottom,
   }
 
   //for XNOR binarizeing weight and only support 2-D convolution
-  const int* kernel_shape_data = this->kernel_shape_.cpu_data();
-  //LOG(INFO)<<" binary_weights : "<<conv_out_channels_<<" "<<conv_in_channels_<<" "
-    //<<kernel_shape_data[0]<<" "<<kernel_shape_data[1];
-  binary_weights_.Reshape(conv_out_channels_ , conv_in_channels_ , 
-      kernel_shape_data[0], kernel_shape_data[1]);
-  binary_weights_.copyRealValueFrom(this->blobs_[0]->cpu_data());
-  //For XNOR convolution binarizing input NCHW and only support one input
-  binary_inputs_.Reshape((*bottom_shape_)[0], (*bottom_shape_)[1], 
-                         (*bottom_shape_)[2], (*bottom_shape_)[3]);  
-  binary_inputs_.copyRealValueFrom(bottom[0]->cpu_data());
+  //binary_inputs_.Reshape((*bottom_shape_)[0], (*bottom_shape_)[1], 
+                         //(*bottom_shape_)[2], (*bottom_shape_)[3]);  
+  //binary_inputs_.copyRealValueFrom(bottom[0]->cpu_data());
 }
 
 template<typename Dtype>
@@ -273,14 +250,54 @@ void XNORConvolutionLayer<Dtype>::Forward_cpu(const vector<Blob<Dtype>*>& bottom
   const int* pad_data = this->pad_.cpu_data();
   const int* dilation_data = this->dilation_.cpu_data();
   Dtype* top_data = top[0]->mutable_cpu_data();  
-  xnorConvolution(binary_inputs_, binary_weights_, top_data,
-     kernel_shape_data[0], kernel_shape_data[1], pad_data[0], pad_data[1], 
-     stride_data[0],stride_data[1], dilation_data[0], dilation_data[1]);
+  caffe_memset(top[0]->count()*sizeof(Dtype), 0, top_data);
+
+  if (!binarized_){
+    alphas_.resize(num_output_);
+#ifdef USE_OMP
+    binarizeWeights_omp(this->blobs_[0]->cpu_data(), binary_weights_, alphas_); 
+#else
+    binarizeWeights(this->blobs_[0]->cpu_data(), binary_weights_, alphas_);
+#endif
+    binarized_ = true;
+  }
+
+  for(int n = 0; n < this->num_; n++){
+    const Dtype* input_data = bottom[0]->cpu_data()+
+                              n * this->bottom_dim_;
+
+  //binarized inputs
+#ifdef USE_OMP
+    binarizeIm2Col_omp(input_data, binary_inputs_, conv_in_channels_, 
+        (*bottom_shape_)[2], (*bottom_shape_)[3], kernel_shape_data[0],
+        kernel_shape_data[1], pad_data[0], pad_data[1], stride_data[0], 
+        stride_data[1], dilation_data[0], dilation_data[1]);
+#else
+    binarizeIm2Col(input_data, binary_inputs_, conv_in_channels_, 
+        (*bottom_shape_)[2], (*bottom_shape_)[3], kernel_shape_data[0],
+        kernel_shape_data[1], pad_data[0], pad_data[1], stride_data[0], 
+        stride_data[1], dilation_data[0], dilation_data[1]);
+#endif
+
+  //popcnt_gemm
+#ifdef USE_OMP
+    xnorGEMM_omp(conv_out_channels_, ceil((float)kernel_dim_/BIN_SIZE), out_spatial_dim_, 
+                      binary_weights_.b_data(), ceil((float)kernel_dim_/BIN_SIZE),
+                      binary_inputs_.b_data(), out_spatial_dim_,
+                      top_data+n*this->top_dim_, out_spatial_dim_,
+                      kernel_dim_, alphas_);
+#else
+    xnorGEMM_baseline(conv_out_channels_, ceil((float)kernel_dim_/BIN_SIZE), out_spatial_dim_, 
+                      binary_weights_.b_data(), ceil((float)kernel_dim_/BIN_SIZE),
+                      binary_inputs_.b_data(), out_spatial_dim_,
+                      top_data+n*this->top_dim_, out_spatial_dim_,
+                      kernel_dim_, alphas_);
+#endif 
+  
   //bias:
-  if (this->bias_term_) {
-    for(int n = 0; n < this->num_; n++){
-        const Dtype* bias = this->blobs_[1]->cpu_data();
-        this->forward_cpu_bias(top_data + n * this->top_dim_, bias);
+    if (this->bias_term_) {
+      const Dtype* bias = this->blobs_[1]->cpu_data();
+      this->forward_cpu_bias(top_data + n * this->top_dim_, bias);
     }
   }
 }

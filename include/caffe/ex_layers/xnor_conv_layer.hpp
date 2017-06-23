@@ -4,12 +4,14 @@
 #include "caffe/blob.hpp"
 #include "caffe/layer.hpp"
 #include "caffe/proto/caffe.pb.h"
-#include "operator/xnet_common.h"
-#include "operator/xnet_function.h"
+#include "xnor_operator/xnet_common.h"
+#include "xnor_operator/xnet_function.h"
 using namespace xnet;
 namespace caffe {
 /*
  *@brief the test layer for XNOR Convolution
+  * For convenience, we use the float gemm to train the xnornet.So, this layer
+  * is only for inferencing. 
  */
 template<typename Dtype>
 class XNORConvolutionLayer: public Layer<Dtype>{
@@ -31,6 +33,8 @@ class XNORConvolutionLayer: public Layer<Dtype>{
   protected:
     BinBlob<Dtype> binary_weights_;
     BinBlob<Dtype> binary_inputs_;
+    vector<Dtype> alphas_;
+    bool binarized_;
     virtual void Forward_cpu(const vector<Blob<Dtype>*>& bottom,
         const vector<Blob<Dtype>*>& top);
     virtual void Backward_cpu(const vector<Blob<Dtype>*>& bottom,

@@ -409,8 +409,13 @@ message LayerParameter {
   optional ThresholdParameter threshold_param = 128;
   optional TileParameter tile_param = 138;
   optional WindowDataParameter window_data_param = 129;
+
+  optional BinactivParameter binactiv_param = 147;
 }
 
+message BinactivParameter {
+    optional bool no_k = 1 [default = false];
+}
 // Message that stores parameters used to apply transformation
 // to the data layer's data
 message TransformationParameter {
