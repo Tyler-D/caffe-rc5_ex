@@ -1,4 +1,4 @@
-#include "caffe/ex_layers/xnor_conv_layer.hpp"
+#include "caffe/ex_layers/xor_conv_layer.hpp"
 #include "caffe/filler.hpp"
 #include <iostream>
 #include <fstream>
@@ -7,7 +7,7 @@ using std::ofstream;
 namespace caffe{
 
 template<typename Dtype>
-void XNORConvolutionLayer<Dtype>::LayerSetUp(const vector<Blob<Dtype>*>& bottom,
+void XORConvolutionLayer<Dtype>::LayerSetUp(const vector<Blob<Dtype>*>& bottom,
     const vector<Blob<Dtype>*>& top){
     //specify the bottom shape:
     ConvolutionParameter conv_param = this->layer_param_.convolution_param();
@@ -181,7 +181,7 @@ void XNORConvolutionLayer<Dtype>::LayerSetUp(const vector<Blob<Dtype>*>& bottom,
 }
 
 template<typename Dtype>
-void XNORConvolutionLayer<Dtype>::Reshape(const vector<Blob<Dtype>*>& bottom,
+void XORConvolutionLayer<Dtype>::Reshape(const vector<Blob<Dtype>*>& bottom,
     const vector<Blob<Dtype>*>& top){
   const int first_spatial_axis = channel_axis_ + 1;
   CHECK_EQ(bottom[0]->num_axes(), first_spatial_axis + num_spatial_axes_)
@@ -218,14 +218,14 @@ void XNORConvolutionLayer<Dtype>::Reshape(const vector<Blob<Dtype>*>& bottom,
         bias_multiplier_.mutable_cpu_data());
   }
 
-  //for XNOR binarizeing weight and only support 2-D convolution
+  //for XOR binarizeing weight and only support 2-D convolution
   //binary_inputs_.Reshape((*bottom_shape_)[0], (*bottom_shape_)[1], 
                          //(*bottom_shape_)[2], (*bottom_shape_)[3]);  
   //binary_inputs_.copyRealValueFrom(bottom[0]->cpu_data());
 }
 
 template<typename Dtype>
-void XNORConvolutionLayer<Dtype>::compute_output_shape(){
+void XORConvolutionLayer<Dtype>::compute_output_shape(){
   const int* kernel_shape_data = this->kernel_shape_.cpu_data();
   const int* stride_data = this->stride_.cpu_data();
   const int* pad_data = this->pad_.cpu_data();
@@ -242,7 +242,7 @@ void XNORConvolutionLayer<Dtype>::compute_output_shape(){
 }
 
 template<typename Dtype>
-void XNORConvolutionLayer<Dtype>::Forward_cpu(const vector<Blob<Dtype>*>& bottom,
+void XORConvolutionLayer<Dtype>::Forward_cpu(const vector<Blob<Dtype>*>& bottom,
     const vector<Blob<Dtype>*>& top){
   //xnor convolution
   const int* kernel_shape_data = this->kernel_shape_.cpu_data();
@@ -254,7 +254,7 @@ void XNORConvolutionLayer<Dtype>::Forward_cpu(const vector<Blob<Dtype>*>& bottom
 
   if (!binarized_){
     alphas_.resize(num_output_);
-#ifdef XNOR_OMP
+#ifdef XOR_OMP
     binarizeWeights_omp(this->blobs_[0]->cpu_data(), binary_weights_, alphas_); 
 #else
     binarizeWeights(this->blobs_[0]->cpu_data(), binary_weights_, alphas_);
@@ -267,7 +267,7 @@ void XNORConvolutionLayer<Dtype>::Forward_cpu(const vector<Blob<Dtype>*>& bottom
                               n * this->bottom_dim_;
 
   //binarized inputs
-#ifdef XNOR_OMP
+#ifdef XOR_OMP
     binarizeIm2Col(input_data, binary_inputs_, conv_in_channels_, 
         (*bottom_shape_)[2], (*bottom_shape_)[3], kernel_shape_data[0],
         kernel_shape_data[1], pad_data[0], pad_data[1], stride_data[0], 
@@ -280,16 +280,16 @@ void XNORConvolutionLayer<Dtype>::Forward_cpu(const vector<Blob<Dtype>*>& bottom
 #endif
 
   //popcnt_gemm
-#ifdef XNOR_OMP
+#ifdef XOR_OMP
     //LOG(INFO)<<"Use OpenMP GEMM";
-    xnorGEMM_omp_unrolled(conv_out_channels_, ceil((float)kernel_dim_/BIN_SIZE), out_spatial_dim_, 
+    xorGEMM_omp_unrolled(conv_out_channels_, ceil((float)kernel_dim_/BIN_SIZE), out_spatial_dim_, 
                       binary_weights_.b_data(), ceil((float)kernel_dim_/BIN_SIZE),
                       binary_inputs_.b_data(), out_spatial_dim_,
                       top_data+n*this->top_dim_, out_spatial_dim_,
                       kernel_dim_, alphas_);
 #else
     //LOG(INFO)<<"Use No OpenMP";
-    xnorGEMM_baseline(conv_out_channels_, ceil((float)kernel_dim_/BIN_SIZE), out_spatial_dim_, 
+    xorGEMM_baseline(conv_out_channels_, ceil((float)kernel_dim_/BIN_SIZE), out_spatial_dim_, 
                       binary_weights_.b_data(), ceil((float)kernel_dim_/BIN_SIZE),
                       binary_inputs_.b_data(), out_spatial_dim_,
                       top_data+n*this->top_dim_, out_spatial_dim_,
@@ -305,14 +305,14 @@ void XNORConvolutionLayer<Dtype>::Forward_cpu(const vector<Blob<Dtype>*>& bottom
 }
 
 template <typename Dtype>
-void XNORConvolutionLayer<Dtype>::forward_cpu_bias(Dtype* output,
+void XORConvolutionLayer<Dtype>::forward_cpu_bias(Dtype* output,
     const Dtype* bias) {
   caffe_cpu_gemm<Dtype>(CblasNoTrans, CblasNoTrans, num_output_,
       out_spatial_dim_, 1, (Dtype)1., bias, bias_multiplier_.cpu_data(),
       (Dtype)1., output);
 }
 
-INSTANTIATE_CLASS(XNORConvolutionLayer);
-REGISTER_LAYER_CLASS(XNORConvolution);
+INSTANTIATE_CLASS(XORConvolutionLayer);
+REGISTER_LAYER_CLASS(XORConvolution);
 
 }

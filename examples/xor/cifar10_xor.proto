@@ -83,7 +83,7 @@ layer {
 }
 layer {
   name: "binary-conv2"
-  type: "XNORConvolution"
+  type: "XORConvolution"
   bottom: "norm1"
   top: "conv2"
   param {

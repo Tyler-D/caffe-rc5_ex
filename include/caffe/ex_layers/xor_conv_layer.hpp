@@ -1,22 +1,22 @@
-#ifndef CAFFE_XNOR_CONVOLUTION_LAYER_HPP_
-#define CAFFE_XNOR_CONVOLUTION_LAYER_HPP_
+#ifndef CAFFE_XOR_CONVOLUTION_LAYER_HPP_
+#define CAFFE_XOR_CONVOLUTION_LAYER_HPP_
 
 #include "caffe/blob.hpp"
 #include "caffe/layer.hpp"
 #include "caffe/proto/caffe.pb.h"
-#include "xnor_operator/xnet_common.h"
-#include "xnor_operator/xnet_function.h"
+#include "xnet_operator/xnet_common.h"
+#include "xnet_operator/xnet_function.h"
 using namespace xnet;
 namespace caffe {
 /*
- *@brief the test layer for XNOR Convolution
+ *@brief the test layer for XOR Convolution
   * For convenience, we use the float gemm to train the xnornet.So, this layer
   * is only for inferencing. 
  */
 template<typename Dtype>
-class XNORConvolutionLayer: public Layer<Dtype>{
+class XORConvolutionLayer: public Layer<Dtype>{
   public:
-    explicit XNORConvolutionLayer(const LayerParameter& param):
+    explicit XORConvolutionLayer(const LayerParameter& param):
       Layer<Dtype>(param){}
     
     virtual void LayerSetUp(const vector<Blob<Dtype>*>& bottom, 
@@ -28,7 +28,7 @@ class XNORConvolutionLayer: public Layer<Dtype>{
     virtual inline int MinTopBlobs() const {return 1;}
     virtual inline bool EqualNumberBottomTopBlobs() const {return 1;}
 
-    virtual inline const char* type() const {return "XNORConvolution";}
+    virtual inline const char* type() const {return "XORConvolution";}
 
   protected:
     BinBlob<Dtype> binary_weights_;
