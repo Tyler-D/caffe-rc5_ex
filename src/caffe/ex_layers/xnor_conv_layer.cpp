@@ -254,7 +254,7 @@ void XNORConvolutionLayer<Dtype>::Forward_cpu(const vector<Blob<Dtype>*>& bottom
 
   if (!binarized_){
     alphas_.resize(num_output_);
-#ifdef USE_OMP
+#ifdef XNOR_OMP
     binarizeWeights_omp(this->blobs_[0]->cpu_data(), binary_weights_, alphas_); 
 #else
     binarizeWeights(this->blobs_[0]->cpu_data(), binary_weights_, alphas_);
@@ -267,8 +267,8 @@ void XNORConvolutionLayer<Dtype>::Forward_cpu(const vector<Blob<Dtype>*>& bottom
                               n * this->bottom_dim_;
 
   //binarized inputs
-#ifdef USE_OMP
-    binarizeIm2Col_omp(input_data, binary_inputs_, conv_in_channels_, 
+#ifdef XNOR_OMP
+    binarizeIm2Col(input_data, binary_inputs_, conv_in_channels_, 
         (*bottom_shape_)[2], (*bottom_shape_)[3], kernel_shape_data[0],
         kernel_shape_data[1], pad_data[0], pad_data[1], stride_data[0], 
         stride_data[1], dilation_data[0], dilation_data[1]);
@@ -280,13 +280,15 @@ void XNORConvolutionLayer<Dtype>::Forward_cpu(const vector<Blob<Dtype>*>& bottom
 #endif
 
   //popcnt_gemm
-#ifdef USE_OMP
-    xnorGEMM_omp(conv_out_channels_, ceil((float)kernel_dim_/BIN_SIZE), out_spatial_dim_, 
+#ifdef XNOR_OMP
+    //LOG(INFO)<<"Use OpenMP GEMM";
+    xnorGEMM_omp_unrolled(conv_out_channels_, ceil((float)kernel_dim_/BIN_SIZE), out_spatial_dim_, 
                       binary_weights_.b_data(), ceil((float)kernel_dim_/BIN_SIZE),
                       binary_inputs_.b_data(), out_spatial_dim_,
                       top_data+n*this->top_dim_, out_spatial_dim_,
                       kernel_dim_, alphas_);
 #else
+    //LOG(INFO)<<"Use No OpenMP";
     xnorGEMM_baseline(conv_out_channels_, ceil((float)kernel_dim_/BIN_SIZE), out_spatial_dim_, 
                       binary_weights_.b_data(), ceil((float)kernel_dim_/BIN_SIZE),
                       binary_inputs_.b_data(), out_spatial_dim_,
